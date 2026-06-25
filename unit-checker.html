@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>เช็คการจัดหน่วยธุรกิจ — Yushi</title>
+<style>
+  :root{--bg:#0f1115;--panel:#171a21;--panel2:#1e222b;--line:#2a2f3a;--text:#e8ebf0;--muted:#9aa3b2;--primary:#5b8cff;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Sarabun','Segoe UI',system-ui,sans-serif;padding:28px;line-height:1.5}
+  h1{font-size:20px;margin:0 0 4px}
+  p.sub{color:var(--muted);margin:0 0 20px;font-size:14px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+  @media(max-width:820px){.row{grid-template-columns:1fr}}
+  label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+  textarea{width:100%;height:320px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);padding:12px;font-family:inherit;font-size:13px;resize:vertical}
+  button{margin-top:10px;background:#3b6ef0;color:#fff;border:none;border-radius:9px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
+  button:hover{background:var(--primary)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.3px}
+  .tag{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+  .summary{margin-top:18px;padding:14px 16px;background:var(--panel);border:1px solid var(--line);border-radius:10px;font-size:13px}
+  .summary b{font-size:15px}
+  .warn{color:#ffb547}
+  code{background:var(--panel2);padding:1px 6px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+  <h1>🏢 เช็คการจัดหน่วยธุรกิจจากชื่อแคมเปญ</h1>
+  <p class="sub">วางชื่อแคมเปญ (บรรทัดละ 1 ชื่อ) แล้วกด "ตรวจสอบ" ระบบใช้ตรรกะเดียวกับในแดชบอร์ด (<code>js/units.js</code>) — ถ้าผลที่นี่ถูก แดชบอร์ดก็จะถูกตาม</p>
+
+  <div class="row">
+    <div>
+      <label>ชื่อแคมเปญ (บรรทัดละ 1 ชื่อ)</label>
+      <textarea id="input">Messages-Yushi Industrial (เครื่องเติมอากาศ) YMT
+Messages-Yushi Industrial (Exhaust) YMT
+Messages-Yushi Industrial (Ventilation) YMT
+Messages-Yushi Industrial (Exhaust) Group
+Conversion-Yushi Bigfan (Fan A12) Sale
+Traffic-Yushi F&B Shinsen Flash Sale
+Search-Yushi System Software
+Lead-Yushi Solution (CRM) Conversion
+Brand-Yushi Group Awareness</textarea>
+      <button id="run">ตรวจสอบ</button>
+    </div>
+    <div>
+      <label>ผลการจัดหน่วยธุรกิจ</label>
+      <table id="out"><thead><tr><th>ชื่อแคมเปญ</th><th>หน่วยธุรกิจ</th></tr></thead><tbody></tbody></table>
+      <div class="summary" id="summary"></div>
+    </div>
+  </div>
+
+  <script src="js/units.js"></script>
+  <script>
+    var COLOR = {bigfan:'#5b8cff',industrial:'#34c77b',supply:'#ffb547',group:'#a374ff',fnb:'#ff5c6c',denki:'#23c2c2',ymt:'#ff8e3c',system:'#8a93a6',solution:'#e368c9',rental:'#aee35a',unassigned:'#555b66'};
+    function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+    function run(){
+      var lines = document.getElementById('input').value.split('\n').map(function(x){return x.trim();}).filter(Boolean);
+      var tb = document.querySelector('#out tbody'); tb.innerHTML='';
+      var counts = {};
+      lines.forEach(function(name){
+        var id = window.AdsUnits.detect(name);
+        counts[id] = (counts[id]||0)+1;
+        var c = COLOR[id]||'#888';
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td>'+esc(name)+'</td><td><span class="tag" style="background:'+c+'33;color:'+c+'">'+esc(window.AdsUnits.label(id))+'</span></td>';
+        tb.appendChild(tr);
+      });
+      var parts = Object.keys(counts).sort(function(a,b){return counts[b]-counts[a];}).map(function(id){
+        return window.AdsUnits.label(id)+': <b>'+counts[id]+'</b>';
+      });
+      var na = counts['unassigned'] ? ' <span class="warn">⚠️ มี '+counts['unassigned']+' แคมเปญที่จับหน่วยไม่ได้ — ตรวจชื่อว่ามีคำว่า "Yushi &lt;หน่วย&gt;" หรือไม่</span>' : '';
+      document.getElementById('summary').innerHTML = 'รวม '+lines.length+' แคมเปญ &nbsp;·&nbsp; '+parts.join(' &nbsp;|&nbsp; ')+na;
+    }
+    document.getElementById('run').addEventListener('click', run);
+    run();
+  </script>
+</body>
+</html>

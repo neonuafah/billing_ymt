@@ -1,0 +1,21 @@
+# Dependencies (ไม่ต้องมีสำหรับเว็บ static)
+node_modules/
+package.json
+package-lock.json
+
+# ไฟล์ทดสอบ/ชั่วคราว
+test.js
+test2.js
+smoke*.js
+dbg.js
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Deploy
+.netlify/
+.vercel/
+*.log
