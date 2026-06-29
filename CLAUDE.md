@@ -10,30 +10,33 @@
 **Ads Optimizer (billing_ymt)** — แดชบอร์ดโฆษณา Facebook/Google/TikTok ของ Yushi
 อัปโหลด CSV/XLSX รายเดือน → รวมยอด คำนวณ metric และให้คำแนะนำ optimize
 
-- เป็น **static web app ฝั่ง browser ล้วนๆ** — ไม่มี backend, ไม่มี server-side code
-- ไฟล์หลัก: `index.html`, `css/styles.css`, `js/*.js` (app.js, parsers.js, recommendations.js, ai.js, units.js)
+- frontend เป็น **static web app ฝั่ง browser** + backend PHP เล็กๆ ใน `api/` (เพิ่มภายหลังเพื่อเก็บข้อมูลรวมศูนย์)
+- ไฟล์หลัก: `index.html`, `css/styles.css`, `js/*.js` (app.js, parsers.js, recommendations.js, ai.js, units.js), `api/*.php`
 - ไม่มี `package.json` (ตั้งใจ — ดู `.gitignore`), ไม่มี build step
 
-## ⚠️ เรื่อง Database — โปรเจกต์นี้ "ไม่มี และไม่ต้องมี" database
+## เรื่อง Database — ตอนนี้ "มี" แล้ว (MySQL ผ่าน PHP)
 
-- ข้อมูลทั้งหมดเก็บใน **`localStorage` ของ browser** ผู้ใช้แต่ละคน
-  - key หลัก: store รายเดือน (`{ 'YYYY-MM': { facebook:[], google:[], tiktok:[] } }`) + `ads_targets`
-  - ดู `loadStore()` / `saveStore()` ใน `js/app.js`
-- การเรียก `fetch` มีที่เดียวคือโหลดไฟล์ตัวอย่างจาก `sample-data/` — ไม่ได้ต่อ API/DB ใดๆ
-- **อย่าพยายาม setup MySQL/PostgreSQL/MongoDB ให้โปรเจกต์นี้** เว้นแต่จะมีการเปลี่ยนสถาปัตยกรรม (เพิ่ม backend) อย่างชัดเจน
-- ข้อจำกัดที่ต้องรู้: ข้อมูล **ไม่ share ข้ามเครื่อง/เบราว์เซอร์** และจะหายถ้า clear browser storage
-  - ถ้าวันหนึ่งต้องการข้อมูลรวมศูนย์/แชร์กันหลายคน → ค่อยเพิ่ม backend + database (เป็นเฟสถัดไป ดู README หัวข้อ "ข้อจำกัดและขั้นถัดไป")
+> เดิมเก็บใน localStorage ของแต่ละเบราว์เซอร์ → เปลี่ยนเป็นเก็บบนเซิร์ฟเวอร์เพื่อให้ **ทุกคนเห็นข้อมูลชุดเดียวกัน**
 
-## Deploy (รวมถึง Plesk)
+- backend อยู่ใน `api/`:
+  - `api/data.php` — REST endpoint (GET อ่านทั้งหมด, POST `save`/`deleteMonth`/`clearAll`/`saveTargets`)
+  - `api/db.php` — ต่อ MySQL (PDO) + **สร้างตาราง `ad_months`, `ad_settings` ให้อัตโนมัติ** (ไม่ต้องรัน SQL เอง)
+  - `api/config.php` — รหัสฐานข้อมูล **ถูก gitignore** (สร้างบนเซิร์ฟเวอร์เองจาก `config.sample.php`)
+  - วิธี setup ละเอียด: `api/README.md`
+- ฝั่ง frontend (`js/app.js`): ชั้นเก็บข้อมูลคือ `bootStore()` / `saveStore()` / `persist()` / `persistDeleteMonth()`
+  - ตอนเปิดแอป `bootStore()` จะลองต่อ `api/data.php` ก่อน; ถ้าต่อไม่ได้ (เช่นรัน local ด้วย python ไม่มี PHP) จะ **fallback ไป localStorage** อัตโนมัติ (`useServer=false`) — dev เดิมยังทำงานได้
+  - การ save บนเซิร์ฟเวอร์ใช้ **upsert (ไม่ลบเดือนที่ไม่ได้ส่งมา)** กันข้อมูลทับกันเวลาหลายคนใช้พร้อมกัน; การลบเดือนมี endpoint แยก
+- **การเข้าถึง: เปิดให้ทุกคน ไม่มีรหัส** (ตามที่เจ้าของเลือก) — ใครมี URL ก็ดู/แก้/ลบได้ ถ้าจะจำกัดต้องเพิ่ม auth ทีหลัง
 
-เพราะเป็น static site จึงต้องการแค่ "เสิร์ฟไฟล์" ไม่ต้องมี runtime/DB:
+## Deploy (Plesk — production ปัจจุบัน)
 
-- **Plesk** (production ปัจจุบัน): ไม่ต้องสร้าง database ใดๆ
-  1. Websites & Domains → เพิ่ม domain/subdomain
-  2. เอาไฟล์ทั้งหมด (index.html, css/, js/, sample-data/) ไปวางใน document root (ปกติคือ `httpdocs/`)
-  3. แนะนำใช้ **Plesk Git** ผูกกับ `https://github.com/neonuafah/billing_ymt.git` branch `main`, deploy path = `httpdocs`, แล้วใช้ Pull/auto-deploy เวลามี push ใหม่
-  4. ไม่ต้องตั้ง PHP/Node/MySQL — เป็นไฟล์ static ที่ Apache/Nginx เสิร์ฟตรงๆ
-- ทางเลือกอื่น (ฟรี): Netlify (มี `netlify.toml`), Vercel (มี `vercel.json`), GitHub Pages, Cloudflare Pages
+ตอนนี้ต้องมี PHP + MySQL (ไม่ใช่ static ล้วนแล้ว):
+
+1. Websites & Domains → โดเมนของเว็บ (PHP เปิด default อยู่แล้ว)
+2. เอาไฟล์ทั้งหมด (รวมโฟลเดอร์ `api/`) ไปวางใน document root (ปกติ `httpdocs/`)
+3. สร้าง MySQL database ใน Plesk แล้วทำตาม **`api/README.md`** (คัดลอก `config.sample.php` → `config.php` ใส่รหัส)
+4. แนะนำใช้ **Plesk Git** ผูกกับ `https://github.com/neonuafah/billing_ymt.git` branch `main`, deploy path = `httpdocs` — `config.php` ที่สร้างบนเซิร์ฟเวอร์จะไม่ถูกแตะเวลา pull (เพราะไม่อยู่ใน git)
+- หมายเหตุ: Netlify/Vercel/GitHub Pages เป็น static-only จะรันได้แค่ส่วนหน้า (ข้อมูลจะ fallback เป็น localStorage ของเครื่องนั้น ไม่ใช่ข้อมูลรวมศูนย์) — production จริงต้องใช้ที่รัน PHP ได้ เช่น Plesk
 
 ## โครงสร้าง git ที่ต้องระวัง (สำคัญ)
 

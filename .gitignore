@@ -19,3 +19,6 @@ Thumbs.db
 .netlify/
 .vercel/
 *.log
+
+# Backend secrets (รหัสฐานข้อมูล — สร้างเองบนเซิร์ฟเวอร์จาก config.sample.php)
+api/config.php

@@ -17,38 +17,83 @@
 
   // ---------- state ----------
   const STORE_KEY = 'ads_store_v1';
+  const API_URL = 'api/data.php';
+  // โหมดเก็บข้อมูล: true = เก็บบนเซิร์ฟเวอร์ (ทุกคนเห็นชุดเดียวกัน), false = localStorage (รันในเครื่อง/เซิร์ฟเวอร์ไม่พร้อม)
+  let useServer = false;
 
   const state = {
-    store: loadStore(),  // { 'YYYY-MM': { facebook:[], google:[], tiktok:[] } } — โหลดจาก localStorage
+    store: {},           // { 'YYYY-MM': { facebook:[], google:[], tiktok:[] } } — เติมค่าใน bootStore()
     month: null,         // เดือนที่กำลังแสดง
     unit: 'all',         // หน่วยธุรกิจที่กรอง
-    targets: loadTargets(),
+    targets: Object.assign({}, R.DEFAULT_TARGETS),
     charts: {},
   };
 
-  function loadTargets() {
+  // รีเฟรช derived + หน่วยธุรกิจตามกฎล่าสุด เผื่อกฎมีการอัปเดต (คงค่าหน่วยที่บันทึกไว้ เช่นจากชื่อไฟล์)
+  function normalizeStore(s) {
+    s = s || {};
+    for (const m in s) {
+      for (const p of PLATFORMS) {
+        s[m][p] = (s[m][p] || []).map((r) => { const d = P.computeDerived(r); if (!d.unit) d.unit = U.detect(d.campaign); return d; });
+      }
+    }
+    return s;
+  }
+
+  function loadTargetsLocal() {
     try { return Object.assign({}, R.DEFAULT_TARGETS, JSON.parse(localStorage.getItem('ads_targets')) || {}); }
     catch { return Object.assign({}, R.DEFAULT_TARGETS); }
   }
-  function saveTargets() { localStorage.setItem('ads_targets', JSON.stringify(state.targets)); }
 
-  // ---- บันทึก/โหลดข้อมูลทุกเดือนแบบถาวรในเบราว์เซอร์ ----
-  function loadStore() {
+  // ---- โหลดข้อมูลตอนเปิดแอป: ลองเซิร์ฟเวอร์ก่อน ถ้าไม่ได้ค่อยใช้ localStorage ----
+  async function bootStore() {
     try {
-      const s = JSON.parse(localStorage.getItem(STORE_KEY)) || {};
-      // รีเฟรช derived + หน่วยธุรกิจตามกฎล่าสุด เผื่อกฎมีการอัปเดต
-      for (const m in s) {
-        for (const p of ['facebook', 'google', 'tiktok']) {
-          // คงค่าหน่วยธุรกิจที่บันทึกไว้ (เช่น ที่มาจากชื่อไฟล์) ถ้าไม่มีค่อย detect จากชื่อแคมเปญ
-          s[m][p] = (s[m][p] || []).map((r) => { const d = window.AdsParser.computeDerived(r); if (!d.unit) d.unit = window.AdsUnits.detect(d.campaign); return d; });
-        }
-      }
-      return s;
-    } catch { return {}; }
+      const res = await fetch(API_URL, { cache: 'no-store' });
+      if (!res.ok) throw new Error('api');
+      const j = await res.json();
+      if (!j || j.ok !== true) throw new Error('api');
+      useServer = true;
+      state.store = normalizeStore(j.store || {});
+      state.targets = Object.assign({}, R.DEFAULT_TARGETS, j.targets || {});
+    } catch {
+      // เซิร์ฟเวอร์ไม่พร้อม (เช่นรันด้วย python http.server) → ใช้ข้อมูลในเบราว์เซอร์
+      useServer = false;
+      try { state.store = normalizeStore(JSON.parse(localStorage.getItem(STORE_KEY)) || {}); } catch { state.store = {}; }
+      state.targets = loadTargetsLocal();
+    }
   }
+
+  // POST ไปเซิร์ฟเวอร์ (toast เมื่อพลาด เพื่อให้ผู้ใช้รู้ว่ายังไม่ถูกบันทึกถาวร)
+  async function persist(body) {
+    try {
+      const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const j = await res.json();
+      if (!res.ok || !j || j.ok !== true) throw new Error((j && j.error) || 'save');
+    } catch (e) {
+      toast('บันทึกขึ้นเซิร์ฟเวอร์ไม่สำเร็จ — ลองอีกครั้ง' + (e && e.message ? ' (' + e.message + ')' : ''));
+    }
+  }
+
+  function saveTargets() {
+    if (useServer) { persist({ action: 'saveTargets', targets: state.targets }); }
+    else { try { localStorage.setItem('ads_targets', JSON.stringify(state.targets)); } catch {} }
+  }
+
+  // ---- บันทึกข้อมูลทุกเดือน ----
+  // เซิร์ฟเวอร์: upsert ทุกเดือนที่มีในหน่วยความจำ (ไม่ลบเดือนที่คนอื่นเพิ่งเพิ่ม) — การลบใช้ deleteMonth แยก
   function saveStore() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(state.store)); }
-    catch (e) { toast('บันทึกข้อมูลไม่สำเร็จ — พื้นที่เบราว์เซอร์อาจเต็ม'); }
+    if (useServer) {
+      persist({ action: 'save', store: state.store });
+    } else {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(state.store)); }
+      catch (e) { toast('บันทึกข้อมูลไม่สำเร็จ — พื้นที่เบราว์เซอร์อาจเต็ม'); }
+    }
+  }
+
+  // ใช้เมื่อมีการลบ "ทั้งเดือน" ออกจาก state แล้ว ให้ลบบนเซิร์ฟเวอร์ด้วย (โหมด local ใช้ saveStore เขียนทับทั้งก้อนพอ)
+  function persistDeleteMonth(m) {
+    if (useServer) persist({ action: 'deleteMonth', month: m });
+    else saveStore();
   }
 
   // ---------- helpers ----------
@@ -516,13 +561,15 @@
     if (!confirm(`ลบข้อมูล ${SHORT[p]} ของเดือน ${formatMonth(m)}?`)) return;
     if (state.store[m]) state.store[m][p] = [];
     // ถ้าเดือนนี้ไม่เหลือแพลตฟอร์มใดเลย ให้ลบทั้งเดือน
+    let removedMonth = false;
     if (state.store[m] && !PLATFORMS.some((x) => (state.store[m][x] || []).length)) {
       delete state.store[m];
+      removedMonth = true;
       const left = monthsAvailable();
       if (state.month === m) state.month = left[left.length - 1] || new Date().toISOString().slice(0, 7);
       $('#reportMonth').value = state.month;
     }
-    saveStore();
+    if (removedMonth) persistDeleteMonth(m); else saveStore();
     refreshAll();
     toast(`ลบข้อมูล ${SHORT[p]} ของ ${formatMonth(m)} แล้ว`);
   }
@@ -530,7 +577,7 @@
   function deleteMonth(m) {
     if (!confirm(`ลบข้อมูลเดือน ${formatMonth(m)} ทั้งหมด?`)) return;
     delete state.store[m];
-    saveStore();
+    persistDeleteMonth(m);
     const left = monthsAvailable();
     if (state.month === m) state.month = left[left.length - 1] || new Date().toISOString().slice(0, 7);
     $('#reportMonth').value = state.month;
@@ -541,7 +588,7 @@
   function clearAll() {
     if (!confirm('ล้างข้อมูลทุกเดือนทั้งหมด? การลบนี้ย้อนกลับไม่ได้')) return;
     state.store = {};
-    saveStore();
+    if (useServer) persist({ action: 'clearAll' }); else saveStore();
     PLATFORMS.forEach((p) => { const el = $('#state-' + p); if (el) { el.textContent = 'ยังไม่อัปโหลด'; el.classList.remove('ok'); } });
     refreshAll();
     toast('ล้างข้อมูลทั้งหมดแล้ว');
@@ -595,7 +642,9 @@
   }
 
   // ---------- init ----------
-  function init() {
+  async function init() {
+    // โหลดข้อมูลจากเซิร์ฟเวอร์ (หรือ localStorage ถ้าเซิร์ฟเวอร์ไม่พร้อม) ก่อนเริ่มแสดงผล
+    await bootStore();
     // ถ้ามีข้อมูลที่บันทึกไว้ ให้เปิดมาที่เดือนล่าสุดที่มีข้อมูล
     const saved = monthsAvailable();
     state.month = saved.length ? saved[saved.length - 1] : new Date().toISOString().slice(0, 7);
