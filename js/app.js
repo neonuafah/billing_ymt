@@ -74,8 +74,18 @@
     }
   }
 
+  // ---- คิวบันทึกแบบต่อคิว (กันการยิง POST พร้อมกันแล้วทับกันเองตอนอัปโหลดหลายไฟล์เร็วๆ) ----
+  // ปัญหาเดิม: saveStore ยิงแบบไม่รอกัน ถ้าอัปหลายไฟล์ติดๆ คำขอที่ข้อมูลน้อยกว่าอาจถึงเซิร์ฟเวอร์
+  // ทีหลังแล้วเขียนทับข้อมูลที่ครบกว่า → ข้อมูล/หน่วยธุรกิจหายบางส่วน
+  // วิธีแก้: ต่อคิวให้บันทึกทีละคำขอตามลำดับ (คำขอสุดท้ายอ่าน state.store ล่าสุดเสมอ ข้อมูลจึงครบ)
+  let saveChain = Promise.resolve();
+  function enqueue(body) {
+    saveChain = saveChain.then(() => persist(body)).catch(() => {});
+    return saveChain;
+  }
+
   function saveTargets() {
-    if (useServer) { persist({ action: 'saveTargets', targets: state.targets }); }
+    if (useServer) { enqueue({ action: 'saveTargets', targets: state.targets }); }
     else { try { localStorage.setItem('ads_targets', JSON.stringify(state.targets)); } catch {} }
   }
 
@@ -83,7 +93,7 @@
   // เซิร์ฟเวอร์: upsert ทุกเดือนที่มีในหน่วยความจำ (ไม่ลบเดือนที่คนอื่นเพิ่งเพิ่ม) — การลบใช้ deleteMonth แยก
   function saveStore() {
     if (useServer) {
-      persist({ action: 'save', store: state.store });
+      enqueue({ action: 'save', store: state.store });
     } else {
       try { localStorage.setItem(STORE_KEY, JSON.stringify(state.store)); }
       catch (e) { toast('บันทึกข้อมูลไม่สำเร็จ — พื้นที่เบราว์เซอร์อาจเต็ม'); }
@@ -92,7 +102,7 @@
 
   // ใช้เมื่อมีการลบ "ทั้งเดือน" ออกจาก state แล้ว ให้ลบบนเซิร์ฟเวอร์ด้วย (โหมด local ใช้ saveStore เขียนทับทั้งก้อนพอ)
   function persistDeleteMonth(m) {
-    if (useServer) persist({ action: 'deleteMonth', month: m });
+    if (useServer) enqueue({ action: 'deleteMonth', month: m });
     else saveStore();
   }
 
@@ -588,7 +598,7 @@
   function clearAll() {
     if (!confirm('ล้างข้อมูลทุกเดือนทั้งหมด? การลบนี้ย้อนกลับไม่ได้')) return;
     state.store = {};
-    if (useServer) persist({ action: 'clearAll' }); else saveStore();
+    if (useServer) enqueue({ action: 'clearAll' }); else saveStore();
     PLATFORMS.forEach((p) => { const el = $('#state-' + p); if (el) { el.textContent = 'ยังไม่อัปโหลด'; el.classList.remove('ok'); } });
     refreshAll();
     toast('ล้างข้อมูลทั้งหมดแล้ว');
