@@ -9,7 +9,22 @@
 <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-<div id="app">
+<!-- Login overlay — แสดงก่อนเข้าสู่ระบบ (ทั้งแอปต้อง login ก่อน) -->
+<div id="loginOverlay" class="login-overlay">
+  <form id="loginForm" class="login-box" autocomplete="on">
+    <div class="login-logo">A</div>
+    <h2>Ads Optimizer</h2>
+    <p>เข้าสู่ระบบผู้ดูแลเพื่อใช้งาน</p>
+    <label for="loginUser">ชื่อผู้ใช้</label>
+    <input type="text" id="loginUser" name="username" autocomplete="username" autofocus />
+    <label for="loginPass">รหัสผ่าน</label>
+    <input type="password" id="loginPass" name="password" autocomplete="current-password" />
+    <div id="loginError" class="login-error"></div>
+    <button type="submit" id="loginBtn" class="btn btn-primary btn-block">เข้าสู่ระบบ</button>
+  </form>
+</div>
+
+<div id="app" class="hidden">
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="brand">
@@ -36,6 +51,7 @@
       <input type="month" id="reportMonth" />
       <div id="monthsHint" class="small muted"></div>
       <button id="loadSampleBtn" class="btn btn-ghost btn-block">โหลดข้อมูลตัวอย่าง</button>
+      <button id="logoutBtn" class="btn btn-outline btn-block hidden">🚪 ออกจากระบบ</button>
     </div>
   </aside>
 

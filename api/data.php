@@ -9,6 +9,10 @@ declare(strict_types=1);
 //   POST api/data.php  { action:'saveTargets', targets:{...} }   → บันทึกค่าเป้าหมาย
 
 require __DIR__ . '/db.php';
+require __DIR__ . '/session.php';
+
+// ทั้งแอปต้องล็อกอินก่อน (อ่าน/เขียน/ลบ ทุกอย่างต้องเป็น admin)
+require_admin();
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $pdo = db();

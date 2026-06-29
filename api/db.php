@@ -9,20 +9,28 @@ function send_json($data, int $code = 200): void {
     exit;
 }
 
+// โหลดค่าตั้งค่า (ฐานข้อมูล + บัญชี admin) จาก config.php
+function cfg(): array {
+    static $cfg = null;
+    if ($cfg !== null) return $cfg;
+    $cfgFile = __DIR__ . '/config.php';
+    if (!is_file($cfgFile)) {
+        send_json(['ok' => false, 'error' => 'ยังไม่ได้ตั้งค่า api/config.php (คัดลอกจาก config.sample.php แล้วใส่ข้อมูลฐานข้อมูล + รหัส admin)'], 500);
+    }
+    $cfg = require $cfgFile;
+    return $cfg;
+}
+
 // เชื่อมต่อฐานข้อมูล + สร้างตารางอัตโนมัติถ้ายังไม่มี (ทีมไม่ต้องรัน SQL เอง)
 function db(): PDO {
     static $pdo = null;
     if ($pdo !== null) return $pdo;
 
-    $cfgFile = __DIR__ . '/config.php';
-    if (!is_file($cfgFile)) {
-        send_json(['ok' => false, 'error' => 'ยังไม่ได้ตั้งค่า api/config.php (คัดลอกจาก config.sample.php แล้วใส่ข้อมูลฐานข้อมูลจาก Plesk)'], 500);
-    }
-    $cfg = require $cfgFile;
-    $dsn = "mysql:host={$cfg['host']};dbname={$cfg['name']};charset={$cfg['charset']}";
+    $c = cfg();
+    $dsn = "mysql:host={$c['host']};dbname={$c['name']};charset={$c['charset']}";
 
     try {
-        $pdo = new PDO($dsn, $cfg['user'], $cfg['pass'], [
+        $pdo = new PDO($dsn, $c['user'], $c['pass'], [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,

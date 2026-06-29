@@ -642,7 +642,12 @@
   }
 
   // ---------- init ----------
-  async function init() {
+  async function startApp() {
+    if (appStarted) return;   // กันเรียกซ้ำ (เช่น login สำเร็จหลังเช็คสถานะ)
+    appStarted = true;
+    const appEl = $('#app'); if (appEl) appEl.classList.remove('hidden');
+    if (useServer) { const lo = $('#logoutBtn'); if (lo) lo.classList.remove('hidden'); }
+
     // โหลดข้อมูลจากเซิร์ฟเวอร์ (หรือ localStorage ถ้าเซิร์ฟเวอร์ไม่พร้อม) ก่อนเริ่มแสดงผล
     await bootStore();
     // ถ้ามีข้อมูลที่บันทึกไว้ ให้เปิดมาที่เดือนล่าสุดที่มีข้อมูล
@@ -691,5 +696,58 @@
     switchView('overview');
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+  // ---------- auth / login ----------
+  const AUTH_URL = 'api/auth.php';
+  let appStarted = false;
+
+  // คืนค่า: 'authed' (login แล้ว) | 'guest' (มี server แต่ยังไม่ login) | 'local' (ไม่มี backend เช่นรันในเครื่อง)
+  async function checkAuth() {
+    try {
+      const res = await fetch(AUTH_URL, { cache: 'no-store' });
+      if (!res.ok) throw 0;
+      const j = await res.json();
+      if (j && j.ok === true) { useServer = true; return j.authed === true ? 'authed' : 'guest'; }
+      throw 0;
+    } catch { return 'local'; }
+  }
+
+  function showLogin() { const ov = $('#loginOverlay'); if (ov) ov.classList.remove('hidden'); const u = $('#loginUser'); if (u) u.focus(); }
+  function hideLogin() { const ov = $('#loginOverlay'); if (ov) ov.classList.add('hidden'); }
+
+  async function doLogin(e) {
+    if (e) e.preventDefault();
+    const u = ($('#loginUser').value || '').trim();
+    const p = $('#loginPass').value || '';
+    const err = $('#loginError'); if (err) err.textContent = '';
+    const btn = $('#loginBtn'); if (btn) btn.disabled = true;
+    try {
+      const res = await fetch(AUTH_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'login', username: u, password: p }) });
+      const j = await res.json();
+      if (res.ok && j && j.ok === true) {
+        useServer = true;
+        $('#loginPass').value = '';
+        hideLogin();
+        await startApp();
+      } else if (err) {
+        err.textContent = (j && j.error) || 'เข้าสู่ระบบไม่สำเร็จ';
+      }
+    } catch { if (err) err.textContent = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'; }
+    finally { if (btn) btn.disabled = false; }
+  }
+
+  async function doLogout() {
+    try { await fetch(AUTH_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'logout' }) }); } catch {}
+    location.reload();
+  }
+
+  async function boot() {
+    const form = $('#loginForm'); if (form) form.addEventListener('submit', doLogin);
+    const lo = $('#logoutBtn'); if (lo) lo.addEventListener('click', doLogout);
+
+    const st = await checkAuth();
+    if (st === 'guest') showLogin();        // ต้อง login ก่อน
+    else { hideLogin(); await startApp(); } // 'authed' หรือ 'local'
+  }
+
+  document.addEventListener('DOMContentLoaded', boot);
 })();
