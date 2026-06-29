@@ -172,13 +172,3 @@ code{background:var(--panel-2);padding:1px 6px;border-radius:5px;font-size:12px}
   body{background:#fff;color:#000}
   .card,.kpi{break-inside:avoid}
 }
-
-/* Login overlay */
-.login-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:20px}
-.login-box{width:340px;max-width:100%;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:30px 26px;box-shadow:0 16px 50px rgba(0,0,0,.5);text-align:left}
-.login-box .login-logo{width:46px;height:46px;border-radius:12px;background:linear-gradient(135deg,var(--primary),var(--purple));display:grid;place-items:center;font-weight:700;font-size:24px;color:#fff;font-family:'Inter';margin-bottom:14px}
-.login-box h2{margin:0 0 2px;font-size:19px}
-.login-box p{margin:0 0 16px;color:var(--muted);font-size:13px}
-.login-box label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 5px}
-.login-error{color:var(--red);font-size:13px;min-height:18px;margin-top:10px}
-.login-box .btn{margin-top:8px}

@@ -19,17 +19,15 @@
 > เดิมเก็บใน localStorage ของแต่ละเบราว์เซอร์ → เปลี่ยนเป็นเก็บบนเซิร์ฟเวอร์เพื่อให้ **ทุกคนเห็นข้อมูลชุดเดียวกัน**
 
 - backend อยู่ใน `api/`:
-  - `api/data.php` — REST endpoint (GET อ่านทั้งหมด, POST `save`/`deleteMonth`/`clearAll`/`saveTargets`) — **ต้อง login ก่อน (เรียก `require_admin()`)**
-  - `api/auth.php` — login/logout/เช็คสถานะ (GET → `{authed}`)
-  - `api/session.php` — จัดการ PHP session + `require_admin()`
+  - `api/data.php` — REST endpoint (GET อ่านทั้งหมด, POST `save`/`deleteMonth`/`clearAll`/`saveTargets`)
   - `api/db.php` — `cfg()` โหลด config + `db()` ต่อ MySQL (PDO) + **สร้างตาราง `ad_months`, `ad_settings` ให้อัตโนมัติ** (ไม่ต้องรัน SQL เอง)
-  - `api/config.php` — รหัสฐานข้อมูล + `admin_user`/`admin_pass` **ถูก gitignore** (สร้างบนเซิร์ฟเวอร์เองจาก `config.sample.php`)
+  - `api/config.php` — รหัสฐานข้อมูล **ถูก gitignore** (สร้างบนเซิร์ฟเวอร์เองจาก `config.sample.php`)
   - วิธี setup ละเอียด: `api/README.md`
-- ฝั่ง frontend (`js/app.js`): ชั้นเก็บข้อมูลคือ `bootStore()` / `saveStore()` / `persist()` / `persistDeleteMonth()`
-  - ตอนเปิดแอป `boot()` → `checkAuth()` เช็ก `api/auth.php` ก่อน: ถ้า `guest` แสดงหน้า login (`#loginOverlay`), ถ้า `authed`/`local` เรียก `startApp()`
-  - `startApp()` (เดิมชื่อ init) จะ `bootStore()` ลองต่อ `api/data.php`; ถ้าต่อไม่ได้ (เช่นรัน local ด้วย python ไม่มี PHP) จะ **fallback ไป localStorage** อัตโนมัติ (`useServer=false`) — dev เดิมยังทำงานได้ (ข้าม login)
+- ฝั่ง frontend (`js/app.js`): ชั้นเก็บข้อมูลคือ `bootStore()` / `saveStore()` / `enqueue()`+`persist()` / `persistDeleteMonth()`
+  - ตอนเปิดแอป `startApp()` จะ `bootStore()` ลองต่อ `api/data.php`; ถ้าต่อไม่ได้ (เช่นรัน local ด้วย python ไม่มี PHP) จะ **fallback ไป localStorage** อัตโนมัติ (`useServer=false`) — dev เดิมยังทำงานได้
   - การ save บนเซิร์ฟเวอร์ใช้ **upsert (ไม่ลบเดือนที่ไม่ได้ส่งมา)** กันข้อมูลทับกันเวลาหลายคนใช้พร้อมกัน; การลบเดือนมี endpoint แยก
-- **การเข้าถึง: ต้อง login ก่อน (ล็อกทั้งแอป)** บัญชีเดียว admin จาก `config.php` — ถ้าจะเปลี่ยนเป็น "ดูได้ไม่ต้อง login แต่แก้ต้อง login" ให้ย้าย `require_admin()` ใน `data.php` ไปเช็คเฉพาะ POST
+  - **ทุกการบันทึกวิ่งผ่านคิว `enqueue()`/`saveChain`** (บันทึกทีละคำขอตามลำดับ) กัน race ตอนอัปโหลดหลายไฟล์เร็วๆ แล้วคำขอเก่าทับข้อมูลที่ครบกว่า
+- **การเข้าถึง: เปิดให้ทุกคน ไม่มี login** (เคยมีระบบ login แต่เจ้าของขอเอาออก 2026-06-29) — ถ้าจะเพิ่มกลับ ดูประวัติ git commit `cfb2bfb`
 
 ## Deploy (Plesk — production ปัจจุบัน)
 

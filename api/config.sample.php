@@ -11,9 +11,4 @@ return [
     'user'    => 'YOUR_DB_USER',       // ชื่อผู้ใช้ฐานข้อมูล
     'pass'    => 'YOUR_DB_PASSWORD',   // รหัสผ่านฐานข้อมูล
     'charset' => 'utf8mb4',
-
-    // ── บัญชีผู้ดูแล (ใช้ login เข้าเว็บ) ──────────────────────
-    // ⚠️ ต้องเปลี่ยนรหัสนี้ก่อนใช้งานจริง อย่าปล่อยเป็น changeme
-    'admin_user' => 'admin',
-    'admin_pass' => 'changeme',
 ];
