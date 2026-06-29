@@ -29,12 +29,20 @@
     charts: {},
   };
 
-  // รีเฟรช derived + หน่วยธุรกิจตามกฎล่าสุด เผื่อกฎมีการอัปเดต (คงค่าหน่วยที่บันทึกไว้ เช่นจากชื่อไฟล์)
+  // รีเฟรช derived + หน่วยธุรกิจตามกฎล่าสุดทุกครั้งที่โหลด
+  // - Facebook/TikTok: ตรวจหน่วยจาก "ชื่อแคมเปญ" เสมอ (ชื่อแคมเปญมีชื่อบริษัทอยู่แล้ว)
+  //   → ซ่อมข้อมูลเก่าที่เคยถูกเหมารวมจากชื่อไฟล์ผิด (เช่น FB ทั้งไฟล์กลายเป็น ymt) ให้แสดงถูกทันที
+  // - Google: คงหน่วยที่บันทึกไว้ (มักมาจากชื่อไฟล์ เพราะชื่อแคมเปญ Google ไม่มีชื่อบริษัท) ถ้าไม่มีค่อยตรวจจากชื่อแคมเปญ
   function normalizeStore(s) {
     s = s || {};
     for (const m in s) {
       for (const p of PLATFORMS) {
-        s[m][p] = (s[m][p] || []).map((r) => { const d = P.computeDerived(r); if (!d.unit) d.unit = U.detect(d.campaign); return d; });
+        s[m][p] = (s[m][p] || []).map((r) => {
+          const d = P.computeDerived(r);
+          if (p === 'google') { if (!d.unit) d.unit = U.detect(d.campaign); }
+          else d.unit = U.detect(d.campaign);
+          return d;
+        });
       }
     }
     return s;
@@ -452,7 +460,9 @@
     const raw = isXlsx ? P.parseWorkbook(data, platform) : P.parseCsvText(csvText, platform);
     // ถ้าชื่อไฟล์มีชื่อหน่วยธุรกิจ → จัดทุกแคมเปญในไฟล์เข้าหน่วยนั้นทั้งหมด
     // (เหมาะกับ Google Ads ที่ชื่อแคมเปญในไฟล์มักไม่มีชื่อบริษัท)
-    const fileUnit = fileName ? U.detect(fileName) : 'unassigned';
+    // ชื่อไฟล์ใช้กำหนดหน่วยธุรกิจ "เฉพาะ Google" (ชื่อแคมเปญ Google มักไม่มีชื่อบริษัท)
+    // Facebook/TikTok ตรวจจากชื่อแคมเปญเสมอ — กันกรณีไฟล์ถูกตั้งชื่อด้วยคำหน่วยธุรกิจ (เช่น YMT) แล้วเหมารวมทั้งไฟล์ผิด
+    const fileUnit = (platform === 'google' && fileName) ? U.detect(fileName) : 'unassigned';
     const recs = raw.map((r) => {
       const d = P.computeDerived(r);
       d.unit = (fileUnit !== 'unassigned') ? fileUnit : U.detect(d.campaign);

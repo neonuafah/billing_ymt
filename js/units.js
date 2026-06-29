@@ -15,7 +15,7 @@
   // company = ชื่อบริษัทแบบเต็ม (สัญญาณแรง), keywords = คำสั้นสำรอง (สัญญาณอ่อน)
   const UNITS = [
     { id: 'ymt',        name: 'Yushi Marketing Technology (YMT)', company: ['yushi marketing technology', 'yushi ymt'], keywords: ['marketing technology', 'ymt'] },
-    { id: 'fnb',        name: 'Yushi F&B (Shinsen)',              company: ['yushi f&b', 'yushi shinsen', 'shinsen'],   keywords: ['shinsen', 'f&b', 'fnb', 'ชินเซน'] },
+    { id: 'fnb',        name: 'Yushi F&B (Shinsen)',              company: ['yushi f&b', 'yushi shinsen', 'shinsen', 'shisen'], keywords: ['shinsen', 'shisen', 'f&b', 'fnb', 'ชินเซน'] },
     { id: 'bigfan',     name: 'Yushi Bigfan',                     company: ['yushi bigfan', 'yushi big fan'],           keywords: ['bigfan', 'big fan', 'บิ๊กแฟน'] },
     { id: 'industrial', name: 'Yushi Industrial',                 company: ['yushi industrial'],                        keywords: ['industrial', 'อินดัสเทรียล'] },
     { id: 'supply',     name: 'Yushi Supply',                     company: ['yushi supply'],                            keywords: ['supply', 'ซัพพลาย'] },
