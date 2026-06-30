@@ -40,13 +40,20 @@
     else { try { localStorage.setItem('ads_targets', JSON.stringify(state.targets)); } catch {} }
   }
 
-  // รีเฟรช derived + หน่วยธุรกิจตามกฎล่าสุด เผื่อกฎมีการอัปเดต
-  // (คงค่าหน่วยธุรกิจที่บันทึกไว้ เช่น ที่มาจากชื่อไฟล์ ถ้าไม่มีค่อย detect จากชื่อแคมเปญ)
+  // รีเฟรช derived + หน่วยธุรกิจตามกฎล่าสุดทุกครั้งที่โหลด
+  // - Facebook/TikTok: ชื่อแคมเปญมีชื่อบริษัทอยู่แล้ว → ตรวจหน่วยจากชื่อแคมเปญเสมอ
+  //   (ซ่อมข้อมูลเก่าที่เคยถูกเหมารวมเป็นหน่วยเดียวจากชื่อไฟล์ผิด เช่น ทั้งไฟล์กลายเป็น ymt — ให้แสดงถูกทันที)
+  // - Google: ชื่อแคมเปญมักไม่มีชื่อบริษัท → คงหน่วยที่บันทึกไว้ (มักมาจากชื่อไฟล์) ถ้าไม่มีค่อยตรวจจากชื่อแคมเปญ
   function normalizeStore(s) {
     s = s || {};
     for (const m in s) {
       for (const p of PLATFORMS) {
-        s[m][p] = (s[m][p] || []).map((r) => { const d = P.computeDerived(r); if (!d.unit) d.unit = U.detect(d.campaign); return d; });
+        s[m][p] = (s[m][p] || []).map((r) => {
+          const d = P.computeDerived(r);
+          if (p === 'google') { if (!d.unit) d.unit = U.detect(d.campaign); }
+          else d.unit = U.detect(d.campaign);
+          return d;
+        });
       }
     }
     return s;
@@ -484,9 +491,9 @@
     // data ของ csv อาจเป็น ArrayBuffer (จากการอัปโหลด) หรือ string (จากตัวอย่าง)
     const csvText = typeof data === 'string' ? data : P.decodeBuffer(data);
     const raw = isXlsx ? P.parseWorkbook(data, platform) : P.parseCsvText(csvText, platform);
-    // ถ้าชื่อไฟล์มีชื่อหน่วยธุรกิจ → จัดทุกแคมเปญในไฟล์เข้าหน่วยนั้นทั้งหมด
-    // (เหมาะกับ Google Ads ที่ชื่อแคมเปญในไฟล์มักไม่มีชื่อบริษัท)
-    const fileUnit = fileName ? U.detect(fileName) : 'unassigned';
+    // ชื่อไฟล์ใช้กำหนดหน่วยธุรกิจ "เฉพาะ Google" (ชื่อแคมเปญ Google มักไม่มีชื่อบริษัท จึงจัดทั้งไฟล์เข้าหน่วยตามชื่อไฟล์)
+    // Facebook/TikTok ตรวจจากชื่อแคมเปญเสมอ — กันกรณีไฟล์ถูกตั้งชื่อด้วยคำหน่วยธุรกิจ (เช่น YMT) แล้วเหมารวมทั้งไฟล์ผิด
+    const fileUnit = (platform === 'google' && fileName) ? U.detect(fileName) : 'unassigned';
     const recs = raw.map((r) => {
       const d = P.computeDerived(r);
       d.unit = (fileUnit !== 'unassigned') ? fileUnit : U.detect(d.campaign);
