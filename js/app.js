@@ -17,101 +17,38 @@
 
   // ---------- state ----------
   const STORE_KEY = 'ads_store_v1';
-  const API_URL = 'api/data.php';
-  // โหมดเก็บข้อมูล: true = เก็บบนเซิร์ฟเวอร์ (ทุกคนเห็นชุดเดียวกัน), false = localStorage (รันในเครื่อง/เซิร์ฟเวอร์ไม่พร้อม)
-  let useServer = false;
 
   const state = {
-    store: {},           // { 'YYYY-MM': { facebook:[], google:[], tiktok:[] } } — เติมค่าใน bootStore()
+    store: loadStore(),  // { 'YYYY-MM': { facebook:[], google:[], tiktok:[] } } — โหลดจาก localStorage
     month: null,         // เดือนที่กำลังแสดง
     unit: 'all',         // หน่วยธุรกิจที่กรอง
-    targets: Object.assign({}, R.DEFAULT_TARGETS),
+    targets: loadTargets(),
     charts: {},
   };
 
-  // รีเฟรช derived + หน่วยธุรกิจตามกฎล่าสุดทุกครั้งที่โหลด
-  // - Facebook/TikTok: ตรวจหน่วยจาก "ชื่อแคมเปญ" เสมอ (ชื่อแคมเปญมีชื่อบริษัทอยู่แล้ว)
-  //   → ซ่อมข้อมูลเก่าที่เคยถูกเหมารวมจากชื่อไฟล์ผิด (เช่น FB ทั้งไฟล์กลายเป็น ymt) ให้แสดงถูกทันที
-  // - Google: คงหน่วยที่บันทึกไว้ (มักมาจากชื่อไฟล์ เพราะชื่อแคมเปญ Google ไม่มีชื่อบริษัท) ถ้าไม่มีค่อยตรวจจากชื่อแคมเปญ
-  function normalizeStore(s) {
-    s = s || {};
-    for (const m in s) {
-      for (const p of PLATFORMS) {
-        s[m][p] = (s[m][p] || []).map((r) => {
-          const d = P.computeDerived(r);
-          if (p === 'google') { if (!d.unit) d.unit = U.detect(d.campaign); }
-          else d.unit = U.detect(d.campaign);
-          return d;
-        });
-      }
-    }
-    return s;
-  }
-
-  function loadTargetsLocal() {
+  function loadTargets() {
     try { return Object.assign({}, R.DEFAULT_TARGETS, JSON.parse(localStorage.getItem('ads_targets')) || {}); }
     catch { return Object.assign({}, R.DEFAULT_TARGETS); }
   }
+  function saveTargets() { localStorage.setItem('ads_targets', JSON.stringify(state.targets)); }
 
-  // ---- โหลดข้อมูลตอนเปิดแอป: ลองเซิร์ฟเวอร์ก่อน ถ้าไม่ได้ค่อยใช้ localStorage ----
-  async function bootStore() {
+  // ---- บันทึก/โหลดข้อมูลทุกเดือนแบบถาวรในเบราว์เซอร์ ----
+  function loadStore() {
     try {
-      const res = await fetch(API_URL, { cache: 'no-store' });
-      if (!res.ok) throw new Error('api');
-      const j = await res.json();
-      if (!j || j.ok !== true) throw new Error('api');
-      useServer = true;
-      state.store = normalizeStore(j.store || {});
-      state.targets = Object.assign({}, R.DEFAULT_TARGETS, j.targets || {});
-    } catch {
-      // เซิร์ฟเวอร์ไม่พร้อม (เช่นรันด้วย python http.server) → ใช้ข้อมูลในเบราว์เซอร์
-      useServer = false;
-      try { state.store = normalizeStore(JSON.parse(localStorage.getItem(STORE_KEY)) || {}); } catch { state.store = {}; }
-      state.targets = loadTargetsLocal();
-    }
+      const s = JSON.parse(localStorage.getItem(STORE_KEY)) || {};
+      // รีเฟรช derived + หน่วยธุรกิจตามกฎล่าสุด เผื่อกฎมีการอัปเดต
+      for (const m in s) {
+        for (const p of ['facebook', 'google', 'tiktok']) {
+          // คงค่าหน่วยธุรกิจที่บันทึกไว้ (เช่น ที่มาจากชื่อไฟล์) ถ้าไม่มีค่อย detect จากชื่อแคมเปญ
+          s[m][p] = (s[m][p] || []).map((r) => { const d = window.AdsParser.computeDerived(r); if (!d.unit) d.unit = window.AdsUnits.detect(d.campaign); return d; });
+        }
+      }
+      return s;
+    } catch { return {}; }
   }
-
-  // POST ไปเซิร์ฟเวอร์ (toast เมื่อพลาด เพื่อให้ผู้ใช้รู้ว่ายังไม่ถูกบันทึกถาวร)
-  async function persist(body) {
-    try {
-      const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const j = await res.json();
-      if (!res.ok || !j || j.ok !== true) throw new Error((j && j.error) || 'save');
-    } catch (e) {
-      toast('บันทึกขึ้นเซิร์ฟเวอร์ไม่สำเร็จ — ลองอีกครั้ง' + (e && e.message ? ' (' + e.message + ')' : ''));
-    }
-  }
-
-  // ---- คิวบันทึกแบบต่อคิว (กันการยิง POST พร้อมกันแล้วทับกันเองตอนอัปโหลดหลายไฟล์เร็วๆ) ----
-  // ปัญหาเดิม: saveStore ยิงแบบไม่รอกัน ถ้าอัปหลายไฟล์ติดๆ คำขอที่ข้อมูลน้อยกว่าอาจถึงเซิร์ฟเวอร์
-  // ทีหลังแล้วเขียนทับข้อมูลที่ครบกว่า → ข้อมูล/หน่วยธุรกิจหายบางส่วน
-  // วิธีแก้: ต่อคิวให้บันทึกทีละคำขอตามลำดับ (คำขอสุดท้ายอ่าน state.store ล่าสุดเสมอ ข้อมูลจึงครบ)
-  let saveChain = Promise.resolve();
-  function enqueue(body) {
-    saveChain = saveChain.then(() => persist(body)).catch(() => {});
-    return saveChain;
-  }
-
-  function saveTargets() {
-    if (useServer) { enqueue({ action: 'saveTargets', targets: state.targets }); }
-    else { try { localStorage.setItem('ads_targets', JSON.stringify(state.targets)); } catch {} }
-  }
-
-  // ---- บันทึกข้อมูลทุกเดือน ----
-  // เซิร์ฟเวอร์: upsert ทุกเดือนที่มีในหน่วยความจำ (ไม่ลบเดือนที่คนอื่นเพิ่งเพิ่ม) — การลบใช้ deleteMonth แยก
   function saveStore() {
-    if (useServer) {
-      enqueue({ action: 'save', store: state.store });
-    } else {
-      try { localStorage.setItem(STORE_KEY, JSON.stringify(state.store)); }
-      catch (e) { toast('บันทึกข้อมูลไม่สำเร็จ — พื้นที่เบราว์เซอร์อาจเต็ม'); }
-    }
-  }
-
-  // ใช้เมื่อมีการลบ "ทั้งเดือน" ออกจาก state แล้ว ให้ลบบนเซิร์ฟเวอร์ด้วย (โหมด local ใช้ saveStore เขียนทับทั้งก้อนพอ)
-  function persistDeleteMonth(m) {
-    if (useServer) enqueue({ action: 'deleteMonth', month: m });
-    else saveStore();
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state.store)); }
+    catch (e) { toast('บันทึกข้อมูลไม่สำเร็จ — พื้นที่เบราว์เซอร์อาจเต็ม'); }
   }
 
   // ---------- helpers ----------
@@ -199,7 +136,7 @@
   // ---------- OVERVIEW ----------
   function renderOverview() {
     const host = $('#overviewKpis');
-    if (!hasAnyData()) { host.innerHTML = emptyState(); destroyChart('spend'); destroyChart('cmp'); $('#platformSummaryTable').innerHTML = ''; return; }
+    if (!hasAnyData()) { host.innerHTML = emptyState(); destroyChart('spend'); destroyChart('cmp'); $('#platformSummaryTable').innerHTML = ''; $('#unitSummaryTable').innerHTML = ''; return; }
     const totals = P.aggregate(allRecords());
     host.innerHTML =
       kpiCard('งบที่ใช้ทั้งหมด', baht(totals.spend)) +
@@ -235,6 +172,40 @@
     }).join('');
     $('#platformSummaryTable').innerHTML =
       `<thead><tr><th>แพลตฟอร์ม</th><th>แคมเปญ</th><th>งบ</th><th>Impr.</th><th>Clicks</th><th>CTR</th><th>Conv.</th><th>CPA</th><th>ROAS</th></tr></thead><tbody>${rows}</tbody>`;
+
+    // สรุปรายบริษัท (หน่วยธุรกิจ) — แตกงบเป็นรายแพลตฟอร์ม Facebook / Google / TikTok
+    const recs = allRecords();
+    const groups = {};
+    for (const r of recs) (groups[r.unit] = groups[r.unit] || []).push(r);
+    const uorder = Object.keys(groups).sort((a, b) => P.aggregate(groups[b]).spend - P.aggregate(groups[a]).spend);
+    const spendOf = (list, p) => P.aggregate(list.filter((r) => r.platform === p)).spend;
+    const urows = uorder.map((uid) => {
+      const list = groups[uid];
+      const a = P.aggregate(list);
+      const color = UNIT_COLOR[uid] || '#888';
+      const fb = spendOf(list, 'facebook'), gg = spendOf(list, 'google'), tt = spendOf(list, 'tiktok');
+      return `<tr>
+        <td><span class="unit-dot" style="background:${color};margin-right:7px"></span>${U.label(uid)}</td>
+        <td>${fb ? baht(fb) : '—'}</td>
+        <td>${gg ? baht(gg) : '—'}</td>
+        <td>${tt ? baht(tt) : '—'}</td>
+        <td><b>${baht(a.spend)}</b></td>
+        <td>${intf(a.conversions)}</td>
+        <td class="${cpaClass(a.cpa)}">${a.cpa ? baht(a.cpa) : '—'}</td>
+        <td class="${roasClass(a.roas)}">${a.roas ? f2(a.roas) + 'x' : '—'}</td>
+      </tr>`;
+    }).join('');
+    // แถวรวมท้ายตาราง
+    const tot = P.aggregate(recs);
+    const totFb = spendOf(recs, 'facebook'), totGg = spendOf(recs, 'google'), totTt = spendOf(recs, 'tiktok');
+    const tfoot = `<tr style="font-weight:700;border-top:2px solid var(--line)">
+        <td>รวมทุกบริษัท</td>
+        <td>${baht(totFb)}</td><td>${baht(totGg)}</td><td>${baht(totTt)}</td>
+        <td>${baht(tot.spend)}</td><td>${intf(tot.conversions)}</td>
+        <td>${tot.cpa ? baht(tot.cpa) : '—'}</td><td>${tot.roas ? f2(tot.roas) + 'x' : '—'}</td>
+      </tr>`;
+    $('#unitSummaryTable').innerHTML =
+      `<thead><tr><th>บริษัท</th><th>🔵 Facebook</th><th>🟢 Google</th><th>⚫ TikTok</th><th>งบรวม</th><th>Conv.</th><th>CPA</th><th>ROAS</th></tr></thead><tbody>${urows}</tbody><tfoot>${tfoot}</tfoot>`;
   }
 
   // ---------- PLATFORM ----------
@@ -460,9 +431,7 @@
     const raw = isXlsx ? P.parseWorkbook(data, platform) : P.parseCsvText(csvText, platform);
     // ถ้าชื่อไฟล์มีชื่อหน่วยธุรกิจ → จัดทุกแคมเปญในไฟล์เข้าหน่วยนั้นทั้งหมด
     // (เหมาะกับ Google Ads ที่ชื่อแคมเปญในไฟล์มักไม่มีชื่อบริษัท)
-    // ชื่อไฟล์ใช้กำหนดหน่วยธุรกิจ "เฉพาะ Google" (ชื่อแคมเปญ Google มักไม่มีชื่อบริษัท)
-    // Facebook/TikTok ตรวจจากชื่อแคมเปญเสมอ — กันกรณีไฟล์ถูกตั้งชื่อด้วยคำหน่วยธุรกิจ (เช่น YMT) แล้วเหมารวมทั้งไฟล์ผิด
-    const fileUnit = (platform === 'google' && fileName) ? U.detect(fileName) : 'unassigned';
+    const fileUnit = fileName ? U.detect(fileName) : 'unassigned';
     const recs = raw.map((r) => {
       const d = P.computeDerived(r);
       d.unit = (fileUnit !== 'unassigned') ? fileUnit : U.detect(d.campaign);
@@ -581,15 +550,13 @@
     if (!confirm(`ลบข้อมูล ${SHORT[p]} ของเดือน ${formatMonth(m)}?`)) return;
     if (state.store[m]) state.store[m][p] = [];
     // ถ้าเดือนนี้ไม่เหลือแพลตฟอร์มใดเลย ให้ลบทั้งเดือน
-    let removedMonth = false;
     if (state.store[m] && !PLATFORMS.some((x) => (state.store[m][x] || []).length)) {
       delete state.store[m];
-      removedMonth = true;
       const left = monthsAvailable();
       if (state.month === m) state.month = left[left.length - 1] || new Date().toISOString().slice(0, 7);
       $('#reportMonth').value = state.month;
     }
-    if (removedMonth) persistDeleteMonth(m); else saveStore();
+    saveStore();
     refreshAll();
     toast(`ลบข้อมูล ${SHORT[p]} ของ ${formatMonth(m)} แล้ว`);
   }
@@ -597,7 +564,7 @@
   function deleteMonth(m) {
     if (!confirm(`ลบข้อมูลเดือน ${formatMonth(m)} ทั้งหมด?`)) return;
     delete state.store[m];
-    persistDeleteMonth(m);
+    saveStore();
     const left = monthsAvailable();
     if (state.month === m) state.month = left[left.length - 1] || new Date().toISOString().slice(0, 7);
     $('#reportMonth').value = state.month;
@@ -608,7 +575,7 @@
   function clearAll() {
     if (!confirm('ล้างข้อมูลทุกเดือนทั้งหมด? การลบนี้ย้อนกลับไม่ได้')) return;
     state.store = {};
-    if (useServer) enqueue({ action: 'clearAll' }); else saveStore();
+    saveStore();
     PLATFORMS.forEach((p) => { const el = $('#state-' + p); if (el) { el.textContent = 'ยังไม่อัปโหลด'; el.classList.remove('ok'); } });
     refreshAll();
     toast('ล้างข้อมูลทั้งหมดแล้ว');
@@ -662,9 +629,7 @@
   }
 
   // ---------- init ----------
-  async function startApp() {
-    // โหลดข้อมูลจากเซิร์ฟเวอร์ (หรือ localStorage ถ้าเซิร์ฟเวอร์ไม่พร้อม) ก่อนเริ่มแสดงผล
-    await bootStore();
+  function init() {
     // ถ้ามีข้อมูลที่บันทึกไว้ ให้เปิดมาที่เดือนล่าสุดที่มีข้อมูล
     const saved = monthsAvailable();
     state.month = saved.length ? saved[saved.length - 1] : new Date().toISOString().slice(0, 7);
@@ -711,5 +676,5 @@
     switchView('overview');
   }
 
-  document.addEventListener('DOMContentLoaded', startApp);
+  document.addEventListener('DOMContentLoaded', init);
 })();
