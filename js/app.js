@@ -44,14 +44,22 @@
   // - Facebook/TikTok: ชื่อแคมเปญมีชื่อบริษัทอยู่แล้ว → ตรวจหน่วยจากชื่อแคมเปญเสมอ
   //   (ซ่อมข้อมูลเก่าที่เคยถูกเหมารวมเป็นหน่วยเดียวจากชื่อไฟล์ผิด เช่น ทั้งไฟล์กลายเป็น ymt — ให้แสดงถูกทันที)
   // - Google: ชื่อแคมเปญมักไม่มีชื่อบริษัท → คงหน่วยที่บันทึกไว้ (มักมาจากชื่อไฟล์) ถ้าไม่มีค่อยตรวจจากชื่อแคมเปญ
+  // ตั้ง normalizeChanged = true เมื่อมีหน่วยถูกแก้ เพื่อให้ bootStore เขียนค่าที่ถูกกลับลง DB ครั้งเดียว
+  let normalizeChanged = false;
   function normalizeStore(s) {
     s = s || {};
+    normalizeChanged = false;
     for (const m in s) {
       for (const p of PLATFORMS) {
         s[m][p] = (s[m][p] || []).map((r) => {
           const d = P.computeDerived(r);
-          if (p === 'google') { if (!d.unit) d.unit = U.detect(d.campaign); }
-          else d.unit = U.detect(d.campaign);
+          if (p === 'google') {
+            if (!d.unit) { d.unit = U.detect(d.campaign); normalizeChanged = true; }
+          } else {
+            const u = U.detect(d.campaign);
+            if (u !== d.unit) normalizeChanged = true;
+            d.unit = u;
+          }
           return d;
         });
       }
@@ -69,6 +77,9 @@
       useServer = true;
       state.store = normalizeStore(j.store || {});
       state.targets = Object.assign({}, R.DEFAULT_TARGETS, j.targets || {});
+      // ซ่อมข้อมูลเก่าในฐานข้อมูล: ถ้า detect แล้วหน่วยเปลี่ยน เขียนค่าที่ถูกกลับลง DB ครั้งเดียว
+      // (โหลดครั้งถัดไปจะ detect ได้ค่าเดิม normalizeChanged = false จึงไม่เขียนซ้ำ)
+      if (normalizeChanged) enqueue({ action: 'save', store: state.store });
     } catch {
       // เซิร์ฟเวอร์ไม่พร้อม (เช่นเปิดแบบ static / ไม่มี PHP) → ใช้ข้อมูลในเบราว์เซอร์แทน
       useServer = false;
