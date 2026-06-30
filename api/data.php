@@ -2,11 +2,12 @@
 declare(strict_types=1);
 
 // API เก็บ/อ่านข้อมูลโฆษณาแบบรวมศูนย์ (ทุกคนเห็นข้อมูลชุดเดียวกัน)
-//   GET  api/data.php                      → { ok, store:{ 'YYYY-MM':{facebook,google,tiktok} }, targets:{} }
+//   GET  api/data.php                      → { ok, store:{ 'YYYY-MM':{facebook,google,tiktok} }, targets:{}, overrides:{} }
 //   POST api/data.php  { action:'save', store:{...} }            → upsert ทุกเดือน (ไม่ลบเดือนที่ไม่ได้ส่งมา)
 //   POST api/data.php  { action:'deleteMonth', month:'YYYY-MM' } → ลบเดือนนั้น
 //   POST api/data.php  { action:'clearAll' }                     → ลบทุกเดือน
 //   POST api/data.php  { action:'saveTargets', targets:{...} }   → บันทึกค่าเป้าหมาย
+//   POST api/data.php  { action:'saveUnitOverrides', overrides:{ '<ข้อความในชื่อแคมเปญ>':'<หน่วย>' } } → กำหนดหน่วยธุรกิจเองรายแคมเปญ
 
 require __DIR__ . '/db.php';
 
@@ -25,7 +26,14 @@ if ($method === 'GET') {
         $t = json_decode($st['v'], true);
         if (is_array($t)) $targets = $t;
     }
-    send_json(['ok' => true, 'store' => (object) $store, 'targets' => $targets]);
+    // หน่วยธุรกิจที่กำหนดเอง (รายแคมเปญ) — ใช้กับแคมเปญที่ชื่อไม่มีคำบอกใบ้ ให้ชนะการ detect อัตโนมัติ
+    $overrides = new stdClass();
+    $ov = $pdo->query("SELECT v FROM ad_settings WHERE k = 'unitOverrides'")->fetch();
+    if ($ov) {
+        $o = json_decode($ov['v'], true);
+        if (is_array($o)) $overrides = (object) $o;
+    }
+    send_json(['ok' => true, 'store' => (object) $store, 'targets' => $targets, 'overrides' => $overrides]);
 }
 
 if ($method === 'POST') {
@@ -71,6 +79,16 @@ if ($method === 'POST') {
                  ON DUPLICATE KEY UPDATE v = VALUES(v)"
             );
             $stmt->execute([':v' => json_encode($targets, JSON_UNESCAPED_UNICODE)]);
+            send_json(['ok' => true]);
+
+        case 'saveUnitOverrides':
+            $ov = $body['overrides'] ?? [];
+            if (!is_array($ov)) send_json(['ok' => false, 'error' => 'overrides ไม่ถูกต้อง'], 400);
+            $stmt = $pdo->prepare(
+                "INSERT INTO ad_settings (k, v) VALUES ('unitOverrides', :v)
+                 ON DUPLICATE KEY UPDATE v = VALUES(v)"
+            );
+            $stmt->execute([':v' => json_encode($ov, JSON_UNESCAPED_UNICODE)]);
             send_json(['ok' => true]);
 
         default:

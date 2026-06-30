@@ -44,6 +44,15 @@
   // - Facebook/TikTok: ชื่อแคมเปญมีชื่อบริษัทอยู่แล้ว → ตรวจหน่วยจากชื่อแคมเปญเสมอ
   //   (ซ่อมข้อมูลเก่าที่เคยถูกเหมารวมเป็นหน่วยเดียวจากชื่อไฟล์ผิด เช่น ทั้งไฟล์กลายเป็น ymt — ให้แสดงถูกทันที)
   // - Google: ชื่อแคมเปญมักไม่มีชื่อบริษัท → คงหน่วยที่บันทึกไว้ (มักมาจากชื่อไฟล์) ถ้าไม่มีค่อยตรวจจากชื่อแคมเปญ
+  // หน่วยธุรกิจที่กำหนดเองรายแคมเปญ (โหลดมาจาก DB) — สำหรับแคมเปญที่ชื่อไม่มีคำบอกใบ้ ให้ชนะการ detect อัตโนมัติ
+  // รูปแบบ: { "<ข้อความบางส่วนในชื่อแคมเปญ>": "<id หน่วย เช่น fnb>" } — จับแบบ "ชื่อแคมเปญมีข้อความนี้อยู่"
+  let unitOverrides = {};
+  function overrideUnit(campaign) {
+    const c = String(campaign || '');
+    for (const key in unitOverrides) { if (key && c.includes(key)) return unitOverrides[key]; }
+    return null;
+  }
+
   // ตั้ง normalizeChanged = true เมื่อมีหน่วยถูกแก้ เพื่อให้ bootStore เขียนค่าที่ถูกกลับลง DB ครั้งเดียว
   let normalizeChanged = false;
   function normalizeStore(s) {
@@ -53,13 +62,14 @@
       for (const p of PLATFORMS) {
         s[m][p] = (s[m][p] || []).map((r) => {
           const d = P.computeDerived(r);
-          if (p === 'google') {
-            if (!d.unit) { d.unit = U.detect(d.campaign); normalizeChanged = true; }
-          } else {
-            const u = U.detect(d.campaign);
-            if (u !== d.unit) normalizeChanged = true;
-            d.unit = u;
-          }
+          const orig = d.unit;
+          const ov = overrideUnit(d.campaign);
+          let u;
+          if (ov) u = ov;                                              // กำหนดเองรายแคมเปญ ชนะทุกอย่าง
+          else if (p === 'google') u = d.unit || U.detect(d.campaign); // Google: คงค่าเดิม
+          else u = U.detect(d.campaign);                               // FB/TikTok: ตรวจจากชื่อแคมเปญ
+          if (u !== orig) normalizeChanged = true;
+          d.unit = u;
           return d;
         });
       }
@@ -75,6 +85,7 @@
       const j = await res.json();
       if (!j || j.ok !== true) throw new Error('api');
       useServer = true;
+      unitOverrides = (j.overrides && typeof j.overrides === 'object') ? j.overrides : {};
       state.store = normalizeStore(j.store || {});
       state.targets = Object.assign({}, R.DEFAULT_TARGETS, j.targets || {});
       // ซ่อมข้อมูลเก่าในฐานข้อมูล: ถ้า detect แล้วหน่วยเปลี่ยน เขียนค่าที่ถูกกลับลง DB ครั้งเดียว
@@ -507,7 +518,8 @@
     const fileUnit = (platform === 'google' && fileName) ? U.detect(fileName) : 'unassigned';
     const recs = raw.map((r) => {
       const d = P.computeDerived(r);
-      d.unit = (fileUnit !== 'unassigned') ? fileUnit : U.detect(d.campaign);
+      const ov = overrideUnit(d.campaign);
+      d.unit = ov ? ov : ((fileUnit !== 'unassigned') ? fileUnit : U.detect(d.campaign));
       return d;
     });
     if (!recs.length) throw new Error('ไม่พบข้อมูลแคมเปญที่อ่านได้ในไฟล์นี้ ลองตรวจหัวคอลัมน์');
